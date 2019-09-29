@@ -19,6 +19,7 @@ module ledcontroller (
 	input [7:0] userb_red,
 	input [7:0] userb_green,
 	input [7:0] userb_blue,
+	input [7:0] masterfader,
 	input [7:0] ledindex, 
 	input [7:0] animationcounter, 
 	input [7:0] stepclock, 
@@ -44,6 +45,10 @@ module ledcontroller (
 	reg [15:0] intensityfaded_green;
 	reg [15:0] intensityfaded_blue;
 
+	reg [15:0] finalfaded_red;
+	reg [15:0] finalfaded_green;
+	reg [15:0] finalfaded_blue;
+
 	reg [7:0] rainbowpos_red;
 	reg [7:0] rainbowpos_green;
 	reg [7:0] rainbowpos_blue;
@@ -51,6 +56,10 @@ module ledcontroller (
 	reg [7:0] steppedcol_red;
 	reg [7:0] steppedcol_green;
 	reg [7:0] steppedcol_blue;
+
+	reg [7:0] predimmed_red;
+	reg [7:0] predimmed_green;
+	reg [7:0] predimmed_blue;
 
 	reg [24:0] rainbowlookup [0:255];
 	reg [24:0] rainbowsplit;
@@ -63,8 +72,8 @@ module ledcontroller (
 		phase <= phase + 1;
 		case (phase)
 			0: begin
-				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 50; // Numleds + 1
-				// normalisedledindex[7:0] <= ledindex+animationcounter; // Numleds + 1
+				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 64; // Numleds + 1
+				// normalisedledindex[7:0] <= ledindex+animationcounter;
 				normalisedledindex[7:0] <= ledindex*4; // Numleds + 1
 				// Generate the fractional position 
 				fractionalposition[15:0] <= animationcounter*49;
@@ -155,25 +164,33 @@ module ledcontroller (
 				case (mode)
 					0: begin
 						// Just a solid block - no animation
-						red[7:0] <= colmux_red[7:0];
-						green[7:0] <= colmux_green[7:0];
-						blue[7:0] <= colmux_blue[7:0];
+						predimmed_red[7:0] <= colmux_red[7:0];
+						predimmed_green[7:0] <= colmux_green[7:0];
+						predimmed_blue[7:0] <= colmux_blue[7:0];
 					end
 					1: begin
 						// Faded block running up
 						intensityfaded_red[15:0] = colmux_red[7:0] * proximity[7:0];
 						intensityfaded_green[15:0] = colmux_green[7:0] * proximity[7:0];
 						intensityfaded_blue[15:0] = colmux_blue[7:0] * proximity[7:0];
-						red[7:0] <= intensityfaded_red[15:8];
-						green[7:0] <= intensityfaded_green[15:8];
-						blue[7:0] <= intensityfaded_blue[15:8];
+						predimmed_red[7:0] <= intensityfaded_red[15:8];
+						predimmed_green[7:0] <= intensityfaded_green[15:8];
+						predimmed_blue[7:0] <= intensityfaded_blue[15:8];
 					end
 					default: begin
-						red[7:0] <= (8'h00);
-						green[7:0] <= (8'h00);
-						blue[7:0] <= (8'h00);
+						predimmed_red[7:0] <= (8'h00);
+						predimmed_green[7:0] <= (8'h00);
+						predimmed_blue[7:0] <= (8'h00);
 					end			
 				endcase
+			end
+			5: begin
+				finalfaded_red = predimmed_red * masterfader;
+				finalfaded_green = predimmed_green * masterfader;
+				finalfaded_blue = predimmed_blue * masterfader;
+				red <= finalfaded_red[15:8];;
+				green <= finalfaded_green[15:8];;
+				blue <= finalfaded_blue[15:8];;
 			end
 		endcase
 	end	

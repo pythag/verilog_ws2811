@@ -39,6 +39,7 @@ module chip (
     .userb_red(8'd0),
     .userb_green(8'd0),
     .userb_blue(8'd50),
+    .masterfader(8'd255),
     .ledindex(ledindex),
     .animationcounter(animationcounter),
     .stepclock(stepclock),
