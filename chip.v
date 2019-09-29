@@ -32,7 +32,7 @@ module chip (
   (
     .clk(clkhigh),
     .mode(8'd1),
-    .colmode(3'd4),
+    .colmode(3'd5),
     .usera_red(8'd50),
     .usera_green(8'd0),
     .usera_blue(8'd0),

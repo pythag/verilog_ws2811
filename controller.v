@@ -32,6 +32,8 @@ module ledcontroller (
 	reg [7:0] colmux_green;
 	reg [7:0] colmux_blue;
 
+	reg [7:0] normalisedledindex;
+
 	reg [15:0] fractionalposition;
 	reg [15:0] proxa;
 	reg [7:0] proximity;
@@ -40,11 +42,27 @@ module ledcontroller (
 	reg [15:0] intensityfaded_green;
 	reg [15:0] intensityfaded_blue;
 
+	reg [7:0] rainbowpos_red;
+	reg [7:0] rainbowpos_green;
+	reg [7:0] rainbowpos_blue;
+
 	reg [7:0] steppedcol_red;
 	reg [7:0] steppedcol_green;
 	reg [7:0] steppedcol_blue;
 
+	reg [24:0] rainbowlookup [0:255];
+	reg [24:0] rainbowsplit;
+
+	initial begin
+		$readmemh("rainbow.hex", rainbowlookup, 0, 255);
+	end
+
 	// Colour modes: 0 = Solid User Block A, 1 = Solid user block B, 2 = Gradient A to B, 3 = Waves A to B, 4 = Stepped RGBY, 5 = Fixed Rainbow, 6 = Moving Rainbow
+	always @* begin
+		// normalisedledindex[7:0] <= { ledindex, 8'h00} / 50; // Numleds + 1
+		// normalisedledindex[7:0] <= ledindex+animationcounter; // Numleds + 1
+		normalisedledindex[7:0] <= ledindex*4; // Numleds + 1
+	end
 
 	// Generate the non-clocked logic for faded proximity intensities
 	always @* begin
@@ -95,6 +113,14 @@ module ledcontroller (
 		endcase		
 	end
 
+	// Generate the non-clocked logic for building static rainbow
+	always @* begin
+		rainbowsplit <= rainbowlookup[normalisedledindex];
+		rainbowpos_red[7:0] <= rainbowsplit[24:17];
+		rainbowpos_green[7:0] <= rainbowsplit[16:8];
+		rainbowpos_blue[7:0] <= rainbowsplit[7:0];
+	end
+
 	// The colour multiplexer
 	always @* begin
 		case (colmode)
@@ -115,6 +141,12 @@ module ledcontroller (
 				colmux_red[7:0] <= steppedcol_red[7:0];
 				colmux_green[7:0] <= steppedcol_green[7:0];
 				colmux_blue[7:0] <= steppedcol_blue[7:0];
+			end
+			5: begin
+				// Fixed rainbow
+				colmux_red[7:0] <= rainbowpos_red[7:0];
+				colmux_green[7:0] <= rainbowpos_green[7:0];
+				colmux_blue[7:0] <= rainbowpos_blue[7:0];
 			end
 			default: begin
 				colmux_red[7:0] <= 0;

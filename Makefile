@@ -13,13 +13,17 @@
 #                                                                             #
 ###############################################################################
 
-chip.bin: chip.v ws2811.v controller.v pll.v ws2811.pcf
+chip.bin: chip.v ws2811.v controller.v pll.v rainbow.hex ws2811.pcf
 	yosys -q -p "synth_ice40 -json chip.json" chip.v ws2811.v pll.v controller.v
 	nextpnr-ice40 --hx8k --package tq144:4k --pcf ws2811.pcf --json chip.json --asc chip.txt
 	icepack chip.txt chip.bin
 
 pll.v: Makefile
 	icepll -i 25 -o 64 -m -f $@
+
+rainbow.hex: rainbow.c
+	gcc rainbow.c -o rainbowgen
+	./rainbowgen > rainbow.hex
 
 .PHONY: upload
 upload:
