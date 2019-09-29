@@ -9,17 +9,42 @@ module animationclock (input clk, output [7:0] animationcounter, output [7:0] st
     end
 endmodule
 
-module ledcontroller (input clk, input [7:0] mode, input [7:0] ledindex, input [7:0] animationcounter, input [7:0] stepclock, output reg [7:0] red, output reg [7:0] green, output reg [7:0] blue);
+module ledcontroller (
+	input clk, 
+	input [7:0] mode, 
+	input [2:0] colmode, 
+	input [7:0] usera_red,
+	input [7:0] usera_green,
+	input [7:0] usera_blue,
+	input [7:0] userb_red,
+	input [7:0] userb_green,
+	input [7:0] userb_blue,
+	input [7:0] ledindex, 
+	input [7:0] animationcounter, 
+	input [7:0] stepclock, 
+	output reg [7:0] red, 
+	output reg [7:0] green, 
+	output reg [7:0] blue);
 
 	reg [1:0] colindex;
+
+	reg [7:0] colmux_red;
+	reg [7:0] colmux_green;
+	reg [7:0] colmux_blue;
 
 	reg [15:0] fractionalposition;
 	reg [15:0] proxa;
 	reg [7:0] proximity;
 
+	reg [15:0] intensityfaded_red;
+	reg [15:0] intensityfaded_green;
+	reg [15:0] intensityfaded_blue;
+
 	reg [7:0] steppedcol_red;
 	reg [7:0] steppedcol_green;
 	reg [7:0] steppedcol_blue;
+
+	// Colour modes: 0 = Solid User Block A, 1 = Solid user block B, 2 = Gradient A to B, 3 = Waves A to B, 4 = Stepped RGBY, 5 = Fixed Rainbow, 6 = Moving Rainbow
 
 	// Generate the non-clocked logic for faded proximity intensities
 	always @* begin
@@ -70,19 +95,51 @@ module ledcontroller (input clk, input [7:0] mode, input [7:0] ledindex, input [
 		endcase		
 	end
 
+	// The colour multiplexer
+	always @* begin
+		case (colmode)
+			0: begin
+				// Solid block of user A
+				colmux_red[7:0] <= usera_red[7:0];
+				colmux_green[7:0] <= usera_green[7:0];
+				colmux_blue[7:0] <= usera_blue[7:0];
+			end
+			1: begin
+				// Solid block of user B
+				colmux_red[7:0] <= userb_red[7:0];
+				colmux_green[7:0] <= userb_green[7:0];
+				colmux_blue[7:0] <= userb_blue[7:0];
+			end
+			4: begin
+				// Red, Green, Blue, Yellow stepped
+				colmux_red[7:0] <= steppedcol_red[7:0];
+				colmux_green[7:0] <= steppedcol_green[7:0];
+				colmux_blue[7:0] <= steppedcol_blue[7:0];
+			end
+			default: begin
+				colmux_red[7:0] <= 0;
+				colmux_green[7:0] <= 0;
+				colmux_blue[7:0] <= 0;
+			end
+		endcase
+	end	
+
 	always @(posedge clk) begin
 		case (mode)
 			0: begin
-				// Red, Green, Blue, Yellow stepped
-				red[7:0] <= steppedcol_red[7:0];
-				green[7:0] <= steppedcol_green[7:0];
-				blue[7:0] <= steppedcol_blue[7:0];
+				// Just a solid block - no animation
+				red[7:0] <= colmux_red[7:0];
+				green[7:0] <= colmux_green[7:0];
+				blue[7:0] <= colmux_blue[7:0];
 			end
 			1: begin
 				// Faded block running up
-				red[7:0] <= (8'h00);
-				green[7:0] <= (8'h00);
-				blue[7:0] <= proximity[7:0];
+				intensityfaded_red[15:0] = colmux_red[7:0] * proximity[7:0];
+				intensityfaded_green[15:0] = colmux_green[7:0] * proximity[7:0];
+				intensityfaded_blue[15:0] = colmux_blue[7:0] * proximity[7:0];
+				red[7:0] <= intensityfaded_red[15:8];
+				green[7:0] <= intensityfaded_green[15:8];
+				blue[7:0] <= intensityfaded_blue[15:8];
 			end
 			default: begin
 				red[7:0] <= (8'h00);

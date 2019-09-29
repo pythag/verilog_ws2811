@@ -31,7 +31,14 @@ module chip (
   ledcontroller thecontroller
   (
     .clk(clkhigh),
-    .mode(8'h01),
+    .mode(8'd1),
+    .colmode(3'd4),
+    .usera_red(8'd50),
+    .usera_green(8'd0),
+    .usera_blue(8'd0),
+    .userb_red(8'd0),
+    .userb_green(8'd0),
+    .userb_blue(8'd50),
     .ledindex(ledindex),
     .animationcounter(animationcounter),
     .stepclock(stepclock),

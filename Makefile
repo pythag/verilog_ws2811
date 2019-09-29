@@ -15,7 +15,7 @@
 
 chip.bin: chip.v ws2811.v controller.v pll.v ws2811.pcf
 	yosys -q -p "synth_ice40 -blif chip.blif" chip.v ws2811.v pll.v controller.v
-	arachne-pnr -d 8k -P tq144:4k -p ws2811.pcf chip.blif -o chip.txt
+	arachne-pnr -r -d 8k -P tq144:4k -p ws2811.pcf chip.blif -o chip.txt
 	icepack chip.txt chip.bin
 
 pll.v: Makefile
