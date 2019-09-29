@@ -26,6 +26,8 @@ module ledcontroller (
 	output reg [7:0] green, 
 	output reg [7:0] blue);
 
+	reg [2:0] phase;
+
 	reg [1:0] colindex;
 
 	reg [7:0] colmux_red;
@@ -57,128 +59,123 @@ module ledcontroller (
 		$readmemh("rainbow.hex", rainbowlookup, 0, 255);
 	end
 
-	// Colour modes: 0 = Solid User Block A, 1 = Solid user block B, 2 = Gradient A to B, 3 = Waves A to B, 4 = Stepped RGBY, 5 = Fixed Rainbow, 6 = Moving Rainbow
-	always @* begin
-		// normalisedledindex[7:0] <= { ledindex, 8'h00} / 50; // Numleds + 1
-		// normalisedledindex[7:0] <= ledindex+animationcounter; // Numleds + 1
-		normalisedledindex[7:0] <= ledindex*4; // Numleds + 1
-	end
-
-	// Generate the non-clocked logic for faded proximity intensities
-	always @* begin
-		// Generate the fractional position 
-		fractionalposition[15:0] <= animationcounter*49;
-		// ABS type function
-		if (fractionalposition>{ ledindex, 8'h00}) begin
-			proxa[15:0] <= fractionalposition-{ ledindex, 8'h00};
-		end else begin
-			proxa[15:0] <= { ledindex, 8'h00}-fractionalposition;
-		end
-		// Actually generate the fading relative to the animation position
-		if (proxa>=1024) begin
-			proximity[7:0] <= 0;
-		end else begin
-			if (proxa<=8) begin
-				proximity[7:0] <= 255;
-			end else begin
-				proximity[7:0] <= 256-(proxa/4);
-			end
-		end
-	end
-
-	// Generate the non-clocked logic for building stepped colours
-	always @* begin
-		colindex[1:0] <= stepclock[1:0] + ledindex;
-		case (colindex)
+	always @(posedge clk) begin
+		phase <= phase + 1;
+		case (phase)
 			0: begin
-				steppedcol_red[7:0] <= (8'hFF);
-				steppedcol_green[7:0] <= (8'h00);
-				steppedcol_blue[7:0] <= (8'h00);
+				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 50; // Numleds + 1
+				// normalisedledindex[7:0] <= ledindex+animationcounter; // Numleds + 1
+				normalisedledindex[7:0] <= ledindex*4; // Numleds + 1
+				// Generate the fractional position 
+				fractionalposition[15:0] <= animationcounter*49;
+				// ABS type function
+				if (fractionalposition>{ ledindex, 8'h00}) begin
+					proxa[15:0] <= fractionalposition-{ ledindex, 8'h00};
+				end else begin
+					proxa[15:0] <= { ledindex, 8'h00}-fractionalposition;
+				end
+				// Actually generate the fading relative to the animation position
+				if (proxa>=1024) begin
+					proximity[7:0] <= 0;
+				end else begin
+					if (proxa<=8) begin
+						proximity[7:0] <= 255;
+					end else begin
+						proximity[7:0] <= 256-(proxa/4);
+					end
+				end
 			end
 			1: begin
-				steppedcol_red[7:0] <= (8'h00);
-				steppedcol_green[7:0] <= (8'hFF);
-				steppedcol_blue[7:0] <= (8'h00);
+				// Generate the stepped colours
+				colindex[1:0] <= stepclock[1:0] + ledindex;
+				case (colindex)
+					0: begin
+						steppedcol_red[7:0] <= (8'hFF);
+						steppedcol_green[7:0] <= (8'h00);
+						steppedcol_blue[7:0] <= (8'h00);
+					end
+					1: begin
+						steppedcol_red[7:0] <= (8'h00);
+						steppedcol_green[7:0] <= (8'hFF);
+						steppedcol_blue[7:0] <= (8'h00);
+					end
+					2: begin
+						steppedcol_red[7:0] <= (8'h00);
+						steppedcol_green[7:0] <= (8'h00);
+						steppedcol_blue[7:0] <= (8'hFF);
+					end
+					3: begin
+						steppedcol_red[7:0] <= (8'hFF);
+						steppedcol_green[7:0] <= (8'hFF);
+						steppedcol_blue[7:0] <= (8'h00);
+					end
+				endcase		
+				// Generate the static rainbow
+				rainbowsplit <= rainbowlookup[normalisedledindex];
+				rainbowpos_red[7:0] <= rainbowsplit[24:17];
+				rainbowpos_green[7:0] <= rainbowsplit[16:8];
+				rainbowpos_blue[7:0] <= rainbowsplit[7:0];
 			end
 			2: begin
-				steppedcol_red[7:0] <= (8'h00);
-				steppedcol_green[7:0] <= (8'h00);
-				steppedcol_blue[7:0] <= (8'hFF);
+				// The colour multiplexer
+				case (colmode)
+					0: begin
+						// Solid block of user A
+						colmux_red[7:0] <= usera_red[7:0];
+						colmux_green[7:0] <= usera_green[7:0];
+						colmux_blue[7:0] <= usera_blue[7:0];
+					end
+					1: begin
+						// Solid block of user B
+						colmux_red[7:0] <= userb_red[7:0];
+						colmux_green[7:0] <= userb_green[7:0];
+						colmux_blue[7:0] <= userb_blue[7:0];
+					end
+					4: begin
+						// Red, Green, Blue, Yellow stepped
+						colmux_red[7:0] <= steppedcol_red[7:0];
+						colmux_green[7:0] <= steppedcol_green[7:0];
+						colmux_blue[7:0] <= steppedcol_blue[7:0];
+					end
+					5: begin
+						// Fixed rainbow
+						colmux_red[7:0] <= rainbowpos_red[7:0];
+						colmux_green[7:0] <= rainbowpos_green[7:0];
+						colmux_blue[7:0] <= rainbowpos_blue[7:0];
+					end
+					default: begin
+						colmux_red[7:0] <= 0;
+						colmux_green[7:0] <= 0;
+						colmux_blue[7:0] <= 0;
+					end
+				endcase
 			end
 			3: begin
-				steppedcol_red[7:0] <= (8'hFF);
-				steppedcol_green[7:0] <= (8'hFF);
-				steppedcol_blue[7:0] <= (8'h00);
-			end
-		endcase		
-	end
-
-	// Generate the non-clocked logic for building static rainbow
-	always @* begin
-		rainbowsplit <= rainbowlookup[normalisedledindex];
-		rainbowpos_red[7:0] <= rainbowsplit[24:17];
-		rainbowpos_green[7:0] <= rainbowsplit[16:8];
-		rainbowpos_blue[7:0] <= rainbowsplit[7:0];
-	end
-
-	// The colour multiplexer
-	always @* begin
-		case (colmode)
-			0: begin
-				// Solid block of user A
-				colmux_red[7:0] <= usera_red[7:0];
-				colmux_green[7:0] <= usera_green[7:0];
-				colmux_blue[7:0] <= usera_blue[7:0];
-			end
-			1: begin
-				// Solid block of user B
-				colmux_red[7:0] <= userb_red[7:0];
-				colmux_green[7:0] <= userb_green[7:0];
-				colmux_blue[7:0] <= userb_blue[7:0];
-			end
-			4: begin
-				// Red, Green, Blue, Yellow stepped
-				colmux_red[7:0] <= steppedcol_red[7:0];
-				colmux_green[7:0] <= steppedcol_green[7:0];
-				colmux_blue[7:0] <= steppedcol_blue[7:0];
-			end
-			5: begin
-				// Fixed rainbow
-				colmux_red[7:0] <= rainbowpos_red[7:0];
-				colmux_green[7:0] <= rainbowpos_green[7:0];
-				colmux_blue[7:0] <= rainbowpos_blue[7:0];
-			end
-			default: begin
-				colmux_red[7:0] <= 0;
-				colmux_green[7:0] <= 0;
-				colmux_blue[7:0] <= 0;
+				// The final output multiplexer
+				case (mode)
+					0: begin
+						// Just a solid block - no animation
+						red[7:0] <= colmux_red[7:0];
+						green[7:0] <= colmux_green[7:0];
+						blue[7:0] <= colmux_blue[7:0];
+					end
+					1: begin
+						// Faded block running up
+						intensityfaded_red[15:0] = colmux_red[7:0] * proximity[7:0];
+						intensityfaded_green[15:0] = colmux_green[7:0] * proximity[7:0];
+						intensityfaded_blue[15:0] = colmux_blue[7:0] * proximity[7:0];
+						red[7:0] <= intensityfaded_red[15:8];
+						green[7:0] <= intensityfaded_green[15:8];
+						blue[7:0] <= intensityfaded_blue[15:8];
+					end
+					default: begin
+						red[7:0] <= (8'h00);
+						green[7:0] <= (8'h00);
+						blue[7:0] <= (8'h00);
+					end			
+				endcase
 			end
 		endcase
 	end	
-
-	always @(posedge clk) begin
-		case (mode)
-			0: begin
-				// Just a solid block - no animation
-				red[7:0] <= colmux_red[7:0];
-				green[7:0] <= colmux_green[7:0];
-				blue[7:0] <= colmux_blue[7:0];
-			end
-			1: begin
-				// Faded block running up
-				intensityfaded_red[15:0] = colmux_red[7:0] * proximity[7:0];
-				intensityfaded_green[15:0] = colmux_green[7:0] * proximity[7:0];
-				intensityfaded_blue[15:0] = colmux_blue[7:0] * proximity[7:0];
-				red[7:0] <= intensityfaded_red[15:8];
-				green[7:0] <= intensityfaded_green[15:8];
-				blue[7:0] <= intensityfaded_blue[15:8];
-			end
-			default: begin
-				red[7:0] <= (8'h00);
-				green[7:0] <= (8'h00);
-				blue[7:0] <= (8'h00);
-			end			
-		endcase
-    end
 
 endmodule
