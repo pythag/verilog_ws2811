@@ -14,8 +14,8 @@
 ###############################################################################
 
 chip.bin: chip.v ws2811.v controller.v pll.v ws2811.pcf
-	yosys -q -p "synth_ice40 -blif chip.blif" chip.v ws2811.v pll.v controller.v
-	arachne-pnr -r -d 8k -P tq144:4k -p ws2811.pcf chip.blif -o chip.txt
+	yosys -q -p "synth_ice40 -json chip.json" chip.v ws2811.v pll.v controller.v
+	nextpnr-ice40 --hx8k --package tq144:4k --pcf ws2811.pcf --json chip.json --asc chip.txt
 	icepack chip.txt chip.bin
 
 pll.v: Makefile
@@ -29,4 +29,4 @@ upload:
 
 .PHONY: clean
 clean:
-	$(RM) -f chip.blif chip.txt chip.ex chip.bin
+	$(RM) -f chip.json chip.txt chip.ex chip.bin
