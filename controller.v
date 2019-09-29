@@ -41,6 +41,10 @@ module ledcontroller (
 	reg [15:0] proxa;
 	reg [7:0] proximity;
 
+	reg [15:0] gradientfaded_red;
+	reg [15:0] gradientfaded_green;
+	reg [15:0] gradientfaded_blue;
+
 	reg [15:0] intensityfaded_red;
 	reg [15:0] intensityfaded_green;
 	reg [15:0] intensityfaded_blue;
@@ -74,7 +78,11 @@ module ledcontroller (
 			0: begin
 				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 64; // Numleds + 1
 				// normalisedledindex[7:0] <= ledindex+animationcounter;
-				normalisedledindex[7:0] <= ledindex*4; // Numleds + 1
+				if ((colmode==3)||(colmode==6)) begin
+					normalisedledindex[7:0] <= (ledindex*4)+animationcounter;
+				end else begin
+					normalisedledindex[7:0] <= ledindex*4 + ledindex; // Numleds + 1
+				end
 				// Generate the fractional position 
 				fractionalposition[15:0] <= animationcounter*49;
 				// ABS type function
@@ -140,6 +148,24 @@ module ledcontroller (
 						colmux_green[7:0] <= userb_green[7:0];
 						colmux_blue[7:0] <= userb_blue[7:0];
 					end
+					2: begin
+						// Static Gradient from A to B
+						gradientfaded_red = usera_red * normalisedledindex + userb_red * (255-normalisedledindex);
+						gradientfaded_green = usera_green * normalisedledindex + userb_green * (255-normalisedledindex);
+						gradientfaded_blue = usera_blue * normalisedledindex + userb_blue * (255-normalisedledindex);
+						colmux_red[7:0] <= gradientfaded_red[15:8];
+						colmux_green[7:0] <= gradientfaded_green[15:8];
+						colmux_blue[7:0] <= gradientfaded_blue[15:8];
+					end
+					3: begin
+						// Moving Gradient from A to B
+						gradientfaded_red = usera_red * normalisedledindex + userb_red * (255-normalisedledindex);
+						gradientfaded_green = usera_green * normalisedledindex + userb_green * (255-normalisedledindex);
+						gradientfaded_blue = usera_blue * normalisedledindex + userb_blue * (255-normalisedledindex);
+						colmux_red[7:0] <= gradientfaded_red[15:8];
+						colmux_green[7:0] <= gradientfaded_green[15:8];
+						colmux_blue[7:0] <= gradientfaded_blue[15:8];
+					end
 					4: begin
 						// Red, Green, Blue, Yellow stepped
 						colmux_red[7:0] <= steppedcol_red[7:0];
@@ -152,7 +178,14 @@ module ledcontroller (
 						colmux_green[7:0] <= rainbowpos_green[7:0];
 						colmux_blue[7:0] <= rainbowpos_blue[7:0];
 					end
+					6: begin
+						// Moving rainbow
+						colmux_red[7:0] <= rainbowpos_red[7:0];
+						colmux_green[7:0] <= rainbowpos_green[7:0];
+						colmux_blue[7:0] <= rainbowpos_blue[7:0];
+					end
 					default: begin
+						// Black
 						colmux_red[7:0] <= 0;
 						colmux_green[7:0] <= 0;
 						colmux_blue[7:0] <= 0;
