@@ -13,6 +13,7 @@ module ledcontroller (
 	input clk, 
 	input [7:0] mode, 
 	input [2:0] colmode, 
+	input [7:0] blocksize,
 	input [7:0] usera_red,
 	input [7:0] usera_green,
 	input [7:0] usera_blue,
@@ -75,16 +76,23 @@ module ledcontroller (
 	always @(posedge clk) begin
 		phase <= phase + 1;
 		case (phase)
+			// Phase is the calculation stage
+			// Stage 0 Calculate some standard numbers required for several effects
+			// animationcounter (input) - 0 to 255, ramps up during animation
+			// normalisedledindex - represent the current pixel we're outputting (calculating) in the range 0 (first) to 255 (last)
+			// fractionalposition - how far along the string is the animation currently at. Range 0 to (numleds*256)
+			// proxa - abs value of distance from animation pixel. Range 0 to (numleds*256)
+			// proximity - represents a rising 8-bit intensity when close to the animation point
 			0: begin
 				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 64; // Numleds + 1
 				// normalisedledindex[7:0] <= ledindex+animationcounter;
 				if ((colmode==3)||(colmode==6)) begin
-					normalisedledindex[7:0] <= (ledindex*4)+animationcounter;
+					normalisedledindex[7:0] <= (ledindex*blocksize)+animationcounter;
 				end else begin
-					normalisedledindex[7:0] <= ledindex*4 + ledindex; // Numleds + 1
+					normalisedledindex[7:0] <= ledindex*blocksize + ledindex; // Numleds + 1
 				end
-				// Generate the fractional position 
-				fractionalposition[15:0] <= animationcounter*49;
+				// Generate the fractional position - somehow need to make this go negative?
+				fractionalposition[15:0] <= animationcounter*55; // numleds + 5
 				// ABS type function
 				if (fractionalposition>{ ledindex, 8'h00}) begin
 					proxa[15:0] <= fractionalposition-{ ledindex, 8'h00};
@@ -102,6 +110,7 @@ module ledcontroller (
 					end
 				end
 			end
+			// Stage 1 - Generate colours based upon ledindex / normalisedledidex
 			1: begin
 				// Generate the stepped colours
 				colindex[1:0] <= stepclock[1:0] + ledindex;
