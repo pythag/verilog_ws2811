@@ -21,51 +21,85 @@ module colourchannelcalculator(
 	output [7:0] colmux);
 
 	reg [15:0] gradientfaded;
+	reg [7:0] colmuxr;
+
+	assign colmux = colmuxr;
 
 	always @(posedge clk) begin
 		case (colmode)
 			0: begin
 				// Solid block of user A
-				colmux[7:0] <= usera[7:0];
+				colmuxr[7:0] = usera[7:0];
 			end
 			1: begin
 				// Solid block of user B
-				colmux[7:0] <= userb[7:0];
+				colmuxr[7:0] = userb[7:0];
 			end
 			2: begin
 				// Static Gradient from A to B
 				gradientfaded = usera * normalisedledindex + userb * (255-normalisedledindex);
-				colmux[7:0] <= gradientfaded[15:8];
+				colmuxr[7:0] = gradientfaded[15:8];
 			end
 			3: begin
 				// Moving Gradient from A to B
 				gradientfaded = usera * normalisedledindex + userb * (255-normalisedledindex);
-				colmux[7:0] <= gradientfaded[15:8];
+				colmuxr[7:0] = gradientfaded[15:8];
 			end
 			4: begin
 				// Red, Green, Blue, Yellow stepped
-				colmux[7:0] <= steppedcol[7:0];
+				colmuxr[7:0] = steppedcol[7:0];
 			end
 			5: begin
 				// Fixed rainbow
-				colmux[7:0] <= rainbowpos[7:0];
+				colmuxr[7:0] = rainbowpos[7:0];
 			end
 			6: begin
 				// Moving rainbow
-				colmux[7:0] <= rainbowpos[7:0];
+				colmuxr[7:0] = rainbowpos[7:0];
 			end
 			default: begin
 				// Black
-				colmux[7:0] <= 0;
+				colmuxr[7:0] = 0;
 			end
 		endcase
 	end
 endmodule
 
+module outputmultiplexer (
+	input clk,
+	input [7:0] mode,
+	input [7:0] colmux,
+	input [7:0] proximity,
+	output [7:0] predimmed);
+
+	reg [7:0] predimmedr;
+	reg [15:0] intensityfaded;
+
+	assign predimmed=predimmedr;
+
+	always @(posedge clk) begin
+		case (mode)
+			0: begin
+				// Just a solid block - no animation
+				predimmedr <= colmux;
+			end
+			1: begin
+				// Faded block running up
+				intensityfaded = colmux * proximity;
+				predimmedr[7:0] <= intensityfaded[15:8];
+			end
+			default: begin
+				predimmedr <= (8'h00);
+			end			
+		endcase
+	end
+endmodule
+
+
 module ledcontroller (
 	input clk, 
 	input [7:0] mode, 
-	input [2:0] colmode, 
+	input [7:0] colmode, 
 	input [7:0] blocksize,
 	input [7:0] usera_red,
 	input [7:0] usera_green,
@@ -81,6 +115,10 @@ module ledcontroller (
 	output reg [7:0] green, 
 	output reg [7:0] blue);
 
+	reg [7:0] mult_in_a;
+	reg [7:0] mult_in_b;
+	wire [15:0] mult_out;
+
 	reg [7:0] usera_mux;
 	reg [7:0] userb_mux;
 
@@ -91,7 +129,8 @@ module ledcontroller (
 	reg [7:0] colmux_red;
 	reg [7:0] colmux_green;
 	reg [7:0] colmux_blue;
-	reg [7:0] colmux_mux;
+	reg [7:0] colmuxout_mux;
+	reg [7:0] colmuxin_mux;
 
 	reg [7:0] normalisedledindex;
 
@@ -99,13 +138,13 @@ module ledcontroller (
 	reg [15:0] proxa;
 	reg [7:0] proximity;
 
-	reg [15:0] intensityfaded_red;
-	reg [15:0] intensityfaded_green;
-	reg [15:0] intensityfaded_blue;
+	// reg [15:0] intensityfaded_red;
+	// reg [15:0] intensityfaded_green;
+	// reg [15:0] intensityfaded_blue;
 
-	reg [15:0] finalfaded_red;
-	reg [15:0] finalfaded_green;
-	reg [15:0] finalfaded_blue;
+	// reg [15:0] finalfaded_red;
+	// reg [15:0] finalfaded_green;
+	// reg [15:0] finalfaded_blue;
 
 	reg [7:0] rainbowpos_red;
 	reg [7:0] rainbowpos_green;
@@ -120,6 +159,7 @@ module ledcontroller (
 	reg [7:0] predimmed_red;
 	reg [7:0] predimmed_green;
 	reg [7:0] predimmed_blue;
+	reg [7:0] predimmed_mux;
 
 	reg [24:0] rainbowlookup [0:255];
 
@@ -137,10 +177,22 @@ module ledcontroller (
 		.fractionalposition(fractionalposition),
 		.steppedcol(steppedcol_mux),
 		.rainbowpos(rainbowpos_mux),
-		.colmux(colmux_mux)
+		.colmux(colmuxout_mux)
 	);
 
+	outputmultiplexer theoutputmux
+	(
+		.clk(clk),
+		.mode(mode),
+		.proximity(proximity),
+		.colmux(colmuxin_mux),
+		.predimmed(predimmed_mux)
+	);	
+
+	assign mult_out = mult_in_a * mult_in_b;
+
 	always @(posedge clk) begin
+		// mult_out <= mult_in_a * mult_in_b;
 		phase <= phase + 1;
 		case (phase)
 			// Phase is the calculation stage
@@ -234,7 +286,7 @@ module ledcontroller (
 				rainbowpos_mux <= rainbowpos_red;
 			end
 			4: begin
-				colmux_red <= colmux_mux;
+				colmux_red <= colmuxout_mux;
 			end
 			5: begin
 				usera_mux <= usera_green;
@@ -243,7 +295,7 @@ module ledcontroller (
 				rainbowpos_mux <= rainbowpos_green;
 			end
 			6: begin
-				colmux_green <= colmux_mux;
+				colmux_green <= colmuxout_mux;
 			end
 			7: begin
 				usera_mux <= usera_blue;
@@ -252,42 +304,52 @@ module ledcontroller (
 				rainbowpos_mux <= rainbowpos_blue;
 			end
 			8: begin
-				colmux_blue <= colmux_mux;
+				colmux_blue <= colmuxout_mux;
 			end
 
 			// Stage 9 - The final output multiplexer
 			9: begin
-				case (mode)
-					0: begin
-						// Just a solid block - no animation
-						predimmed_red[7:0] <= colmux_red[7:0];
-						predimmed_green[7:0] <= colmux_green[7:0];
-						predimmed_blue[7:0] <= colmux_blue[7:0];
-					end
-					1: begin
-						// Faded block running up
-						intensityfaded_red[15:0] = colmux_red[7:0] * proximity[7:0];
-						intensityfaded_green[15:0] = colmux_green[7:0] * proximity[7:0];
-						intensityfaded_blue[15:0] = colmux_blue[7:0] * proximity[7:0];
-						predimmed_red[7:0] <= intensityfaded_red[15:8];
-						predimmed_green[7:0] <= intensityfaded_green[15:8];
-						predimmed_blue[7:0] <= intensityfaded_blue[15:8];
-					end
-					default: begin
-						predimmed_red[7:0] <= (8'h00);
-						predimmed_green[7:0] <= (8'h00);
-						predimmed_blue[7:0] <= (8'h00);
-					end			
-				endcase
+				colmuxin_mux <= colmux_red;
 			end
 			10: begin
-				finalfaded_red = predimmed_red * masterfader;
-				finalfaded_green = predimmed_green * masterfader;
-				finalfaded_blue = predimmed_blue * masterfader;
-				red <= finalfaded_red[15:8];;
-				green <= finalfaded_green[15:8];;
-				blue <= finalfaded_blue[15:8];;
+				predimmed_red <= predimmed_mux;
 			end
+			11: begin
+				colmuxin_mux <= colmux_green;
+			end
+			12: begin
+				predimmed_green <= predimmed_mux;
+			end
+			13: begin
+				colmuxin_mux <= colmux_blue;
+			end
+			14: begin
+				predimmed_blue <= predimmed_mux;
+			end
+
+
+
+			// Master dimmer
+			15: begin
+				mult_in_a <= predimmed_red;
+				mult_in_b <= masterfader;
+			end
+			16: begin
+				red <= mult_out[15:8];
+			end
+			17: begin
+				mult_in_a <= predimmed_green;
+			end
+			18: begin
+				green <= mult_out[15:8];
+			end
+			19: begin
+				mult_in_a <= predimmed_blue;
+			end
+			20: begin
+				blue <= mult_out[15:8];
+			end
+
 		endcase
 	end	
 
