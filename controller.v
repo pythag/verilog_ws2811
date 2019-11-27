@@ -9,6 +9,7 @@ module animationclock (input clk, output [7:0] animationcounter, output [7:0] st
     end
 endmodule
 
+// Essentially a colour multiplexer (single channel at a time)
 module colourchannelcalculator(
 	input clk,
 	input [7:0] colmode, 
@@ -20,7 +21,7 @@ module colourchannelcalculator(
 	input [7:0] rainbowpos,
 	output [7:0] colmux);
 
-	reg [15:0] gradientfaded;
+	reg [7:0] throwaway;
 	reg [7:0] colmuxr;
 
 	assign colmux = colmuxr;
@@ -29,37 +30,35 @@ module colourchannelcalculator(
 		case (colmode)
 			0: begin
 				// Solid block of user A
-				colmuxr[7:0] = usera[7:0];
+				colmuxr <= usera;
 			end
 			1: begin
 				// Solid block of user B
-				colmuxr[7:0] = userb[7:0];
+				colmuxr <= userb;
 			end
 			2: begin
 				// Static Gradient from A to B
-				gradientfaded = usera * normalisedledindex + userb * (255-normalisedledindex);
-				colmuxr[7:0] = gradientfaded[15:8];
+				{ colmuxr, throwaway } <= usera * normalisedledindex + userb * (255-normalisedledindex);
 			end
 			3: begin
-				// Moving Gradient from A to B
-				gradientfaded = usera * normalisedledindex + userb * (255-normalisedledindex);
-				colmuxr[7:0] = gradientfaded[15:8];
+				// TODO: Moving Gradient from A to B
+				{ colmuxr, throwaway } <= usera * normalisedledindex + userb * (255-normalisedledindex);
 			end
 			4: begin
 				// Red, Green, Blue, Yellow stepped
-				colmuxr[7:0] = steppedcol[7:0];
+				colmuxr <= steppedcol;
 			end
 			5: begin
 				// Fixed rainbow
-				colmuxr[7:0] = rainbowpos[7:0];
+				colmuxr <= rainbowpos;
 			end
 			6: begin
 				// Moving rainbow
-				colmuxr[7:0] = rainbowpos[7:0];
+				colmuxr <= rainbowpos;
 			end
 			default: begin
 				// Black
-				colmuxr[7:0] = 0;
+				colmuxr <= 0;
 			end
 		endcase
 	end
@@ -73,7 +72,8 @@ module outputmultiplexer (
 	output [7:0] predimmed);
 
 	reg [7:0] predimmedr;
-	reg [15:0] intensityfaded;
+
+	reg [7:0] throwaway;
 
 	assign predimmed=predimmedr;
 
@@ -85,8 +85,7 @@ module outputmultiplexer (
 			end
 			1: begin
 				// Faded block running up
-				intensityfaded = colmux * proximity;
-				predimmedr[7:0] <= intensityfaded[15:8];
+				{ predimmedr, throwaway } <= colmux * proximity;
 			end
 			default: begin
 				predimmedr <= (8'h00);
@@ -137,14 +136,6 @@ module ledcontroller (
 	reg [15:0] fractionalposition;
 	reg [15:0] proxa;
 	reg [7:0] proximity;
-
-	// reg [15:0] intensityfaded_red;
-	// reg [15:0] intensityfaded_green;
-	// reg [15:0] intensityfaded_blue;
-
-	// reg [15:0] finalfaded_red;
-	// reg [15:0] finalfaded_green;
-	// reg [15:0] finalfaded_blue;
 
 	reg [7:0] rainbowpos_red;
 	reg [7:0] rainbowpos_green;
@@ -204,8 +195,6 @@ module ledcontroller (
 			// normalisedledindex - represent the current pixel we're outputting (calculating) in the range 0 (first) to 255 (last)
 			// fractionalposition - how far along the string is the animation currently at. Range 0 to (numleds*256)
 			0: begin
-				// normalisedledindex[7:0] <= { ledindex, 8'h00} / 64; // Numleds + 1
-				// normalisedledindex[7:0] <= ledindex+animationcounter;
 				if ((colmode==3)||(colmode==6)) begin
 					normalisedledindex[7:0] <= (ledindex*blocksize)+animationcounter;
 				end else begin
@@ -244,12 +233,6 @@ module ledcontroller (
 					end
 				endcase		
 				// Generate the static rainbow
-				/*
-				rainbowsplit <= rainbowlookup[normalisedledindex];
-				rainbowpos_red[7:0] <= rainbowsplit[24:17];
-				rainbowpos_green[7:0] <= rainbowsplit[16:8];
-				rainbowpos_blue[7:0] <= rainbowsplit[7:0];
-				*/
 				rainbowpos_red[7:0] <= rainbowlookup[normalisedledindex][24:17];
 				rainbowpos_green[7:0] <= rainbowlookup[normalisedledindex][16:8];
 				rainbowpos_blue[7:0] <= rainbowlookup[normalisedledindex][7:0];
