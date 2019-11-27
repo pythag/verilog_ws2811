@@ -44,6 +44,8 @@ module chip (
     .ledindex(ledindex),
     .animationcounter(animationcounter),
     .stepclock(stepclock),
+    .glitterrate(8'd245),
+    .glittervolume(8'd10),
     .red(red),
     .green(green),
     .blue(blue)

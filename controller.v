@@ -1,3 +1,22 @@
+module lfsr (
+	output [10:0] out,
+	input clk
+	);
+
+	wire linear_feedback;
+
+	reg [15:0] lfsrreg;
+
+	assign linear_feedback = !(lfsrreg[15] ^ lfsrreg[13] ^ lfsrreg[12] ^ lfsrreg[10]);
+	assign out = lfsrreg[10:0];
+
+	always @(posedge clk) begin
+		lfsrreg <= {lfsrreg[14:0], linear_feedback};
+	end 
+
+endmodule
+
+
 module animationclock (input clk, output [7:0] animationcounter, output [7:0] stepclock);
 	reg [32:0] count;
 
@@ -109,7 +128,9 @@ module ledcontroller (
 	input [7:0] masterfader,
 	input [7:0] ledindex, 
 	input [7:0] animationcounter, 
-	input [7:0] stepclock, 
+	input [7:0] stepclock,
+	input [7:0] glitterrate,
+	input [7:0] glittervolume,
 	output reg [7:0] red, 
 	output reg [7:0] green, 
 	output reg [7:0] blue);
@@ -142,6 +163,14 @@ module ledcontroller (
 
 	reg [24:0] rainbowlookup [0:255];
 
+	reg [255:0] glitterpos;
+	reg [7:0] glitterclock;
+	reg glittercalculating;
+	reg [7:0] glitteri;
+	reg [4:0] glitterdivider;
+
+	reg [10:0] lfsrout;
+
 	initial begin
 		$readmemh("rainbow.hex", rainbowlookup, 0, 255);
 	end
@@ -166,7 +195,13 @@ module ledcontroller (
 		.proximity(proximity),
 		.colmux(colmux_mux),
 		.predimmed(predimmed_mux)
-	);	
+	);
+
+	lfsr thelfrs
+	(
+		.clk(clk),
+		.out(lfsrout)
+	);
 
 	assign fadeout = predimmed_mux * masterfader;
 
@@ -187,11 +222,23 @@ module ledcontroller (
 				end
 				// Generate the fractional position - somehow need to make this go negative?
 				fractionalposition <= animationcounter*55; // numleds + 5
+				// Deal with populating the glitterpos array randomly
+				glitterdivider <= glitterdivider +1;
+				if (glitterdivider==0) begin
+					if (glitterclock<=glitterrate) begin
+						glitterpos[glitteri] <= (lfsrout<glittervolume);
+						glitteri <= glitteri + 1;
+						glitterclock <= 255;
+					end	else begin
+						glitterclock <= glitterclock-1;
+					end
+				end
 			end
 
 
 			// Stage 1 - Generate colours based upon ledindex / normalisedledidex
 			// proxa - abs value of distance from animation pixel. Range 0 to (numleds*256)
+			// TODO: Use blocksize for this too
 			1: begin
 				// Generate the stepped colours
 				colindex[1:0] <= stepclock[1:0] + ledindex;
@@ -249,7 +296,11 @@ module ledcontroller (
 			end
 			// Skip a clock so result can propogate through the output mux and master fader
 			5: begin
-				red <= fadeout;
+				if (glitterpos[normalisedledindex]) begin
+					red <= 255;
+				end else begin
+					red <= fadeout[15:8];
+				end
 			end
 			6: begin
 				usera_mux <= usera_green;
@@ -259,7 +310,11 @@ module ledcontroller (
 			end
 			// Skip
 			8: begin
-				green <= fadeout;
+				if (glitterpos[normalisedledindex]) begin
+					green <= 255;
+				end else begin
+					green <= fadeout[15:8];
+				end
 			end
 			9: begin
 				usera_mux <= usera_blue;
@@ -269,9 +324,12 @@ module ledcontroller (
 			end
 			// Skip
 			11: begin
-				blue <= fadeout;
+				if (glitterpos[normalisedledindex]) begin
+					blue <= 255;
+				end else begin
+					blue <= fadeout[15:8];
+				end
 			end
-
 		endcase
 	end	
 
