@@ -41,7 +41,7 @@ module colourchannelcalculator(
 				{ colmuxr, throwaway } <= usera * normalisedledindex + userb * (255-normalisedledindex);
 			end
 			3: begin
-				// TODO: Moving Gradient from A to B
+				// Moving Gradient from A to B (movement is handled by controller adjusting normalisedledindex)
 				{ colmuxr, throwaway } <= usera * normalisedledindex + userb * (255-normalisedledindex);
 			end
 			4: begin
@@ -53,7 +53,7 @@ module colourchannelcalculator(
 				colmuxr <= rainbowpos;
 			end
 			6: begin
-				// Moving rainbow
+				// Moving rainbow (movement is handled by controller adjusting normalisedledindex)
 				colmuxr <= rainbowpos;
 			end
 			default: begin
@@ -114,9 +114,7 @@ module ledcontroller (
 	output reg [7:0] green, 
 	output reg [7:0] blue);
 
-	reg [7:0] mult_in_a;
-	reg [7:0] mult_in_b;
-	wire [15:0] mult_out;
+	wire [15:0] fadeout;
 
 	reg [7:0] usera_mux;
 	reg [7:0] userb_mux;
@@ -125,11 +123,7 @@ module ledcontroller (
 
 	reg [1:0] colindex;
 
-	reg [7:0] colmux_red;
-	reg [7:0] colmux_green;
-	reg [7:0] colmux_blue;
-	reg [7:0] colmuxout_mux;
-	reg [7:0] colmuxin_mux;
+	reg [7:0] colmux_mux;
 
 	reg [7:0] normalisedledindex;
 
@@ -137,9 +131,6 @@ module ledcontroller (
 	reg [15:0] proxa;
 	reg [7:0] proximity;
 
-	reg [7:0] rainbowpos_red;
-	reg [7:0] rainbowpos_green;
-	reg [7:0] rainbowpos_blue;
 	reg [7:0] rainbowpos_mux;
 
 	reg [7:0] steppedcol_red;
@@ -147,9 +138,6 @@ module ledcontroller (
 	reg [7:0] steppedcol_blue;
 	reg [7:0] steppedcol_mux;
 
-	reg [7:0] predimmed_red;
-	reg [7:0] predimmed_green;
-	reg [7:0] predimmed_blue;
 	reg [7:0] predimmed_mux;
 
 	reg [24:0] rainbowlookup [0:255];
@@ -168,7 +156,7 @@ module ledcontroller (
 		.fractionalposition(fractionalposition),
 		.steppedcol(steppedcol_mux),
 		.rainbowpos(rainbowpos_mux),
-		.colmux(colmuxout_mux)
+		.colmux(colmux_mux)
 	);
 
 	outputmultiplexer theoutputmux
@@ -176,32 +164,29 @@ module ledcontroller (
 		.clk(clk),
 		.mode(mode),
 		.proximity(proximity),
-		.colmux(colmuxin_mux),
+		.colmux(colmux_mux),
 		.predimmed(predimmed_mux)
 	);	
 
-	assign mult_out = mult_in_a * mult_in_b;
+	assign fadeout = predimmed_mux * masterfader;
 
 	always @(posedge clk) begin
-		// mult_out <= mult_in_a * mult_in_b;
 		phase <= phase + 1;
 		case (phase)
-			// Phase is the calculation stage
-
-
 
 			// Stage 0 Calculate some standard numbers required for several effects
 			// animationcounter (input) - 0 to 255, ramps up during animation
 			// normalisedledindex - represent the current pixel we're outputting (calculating) in the range 0 (first) to 255 (last)
 			// fractionalposition - how far along the string is the animation currently at. Range 0 to (numleds*256)
 			0: begin
+				// A bit of a short-cut here - rainbow and gradient animation is achieved by manipulating this normalisedledindex
 				if ((colmode==3)||(colmode==6)) begin
-					normalisedledindex[7:0] <= (ledindex*blocksize)+animationcounter;
+					normalisedledindex <= (ledindex*blocksize)+animationcounter;
 				end else begin
-					normalisedledindex[7:0] <= ledindex*blocksize + ledindex; // Numleds + 1
+					normalisedledindex <= ledindex*blocksize + ledindex; // Numleds + 1
 				end
 				// Generate the fractional position - somehow need to make this go negative?
-				fractionalposition[15:0] <= animationcounter*55; // numleds + 5
+				fractionalposition <= animationcounter*55; // numleds + 5
 			end
 
 
@@ -232,10 +217,7 @@ module ledcontroller (
 						steppedcol_blue[7:0] <= (8'h00);
 					end
 				endcase		
-				// Generate the static rainbow
-				rainbowpos_red[7:0] <= rainbowlookup[normalisedledindex][24:17];
-				rainbowpos_green[7:0] <= rainbowlookup[normalisedledindex][16:8];
-				rainbowpos_blue[7:0] <= rainbowlookup[normalisedledindex][7:0];
+
 				// Generate the proximity values
 				// ABS type function
 				if (fractionalposition>{ ledindex, 8'h00}) begin
@@ -249,88 +231,45 @@ module ledcontroller (
 			// proximity - represents a rising 8-bit intensity when close to the animation point
 			2: begin
 				if (proxa>=1024) begin
-					proximity[7:0] <= 0;
+					proximity <= 0;
 				end else begin
 					if (proxa<=8) begin
-						proximity[7:0] <= 255;
+						proximity <= 255;
 					end else begin
-						proximity[7:0] <= 256-(proxa/4);
+						proximity <= 256-(proxa/4);
 					end
 				end			
 			end
 
-			// Stages 3 to 8 - The colour multiplexer / calculator
-			// colours are calculated on the first clock of each pair
-			// Colours are stored on the second clock of each pair
 			3: begin
 				usera_mux <= usera_red;
 				userb_mux <= userb_red;
 				steppedcol_mux <= steppedcol_red;
-				rainbowpos_mux <= rainbowpos_red;
+				rainbowpos_mux <= rainbowlookup[normalisedledindex][24:17];
 			end
-			4: begin
-				colmux_red <= colmuxout_mux;
-			end
+			// Skip a clock so result can propogate through the output mux and master fader
 			5: begin
+				red <= fadeout;
+			end
+			6: begin
 				usera_mux <= usera_green;
 				userb_mux <= userb_green;
 				steppedcol_mux <= steppedcol_green;
-				rainbowpos_mux <= rainbowpos_green;
+				rainbowpos_mux <= rainbowlookup[normalisedledindex][16:8];
 			end
-			6: begin
-				colmux_green <= colmuxout_mux;
+			// Skip
+			8: begin
+				green <= fadeout;
 			end
-			7: begin
+			9: begin
 				usera_mux <= usera_blue;
 				userb_mux <= userb_blue;
 				steppedcol_mux <= steppedcol_blue;
-				rainbowpos_mux <= rainbowpos_blue;
+				rainbowpos_mux <= rainbowlookup[normalisedledindex][7:0];
 			end
-			8: begin
-				colmux_blue <= colmuxout_mux;
-			end
-
-			// Stage 9 - The final output multiplexer
-			9: begin
-				colmuxin_mux <= colmux_red;
-			end
-			10: begin
-				predimmed_red <= predimmed_mux;
-			end
+			// Skip
 			11: begin
-				colmuxin_mux <= colmux_green;
-			end
-			12: begin
-				predimmed_green <= predimmed_mux;
-			end
-			13: begin
-				colmuxin_mux <= colmux_blue;
-			end
-			14: begin
-				predimmed_blue <= predimmed_mux;
-			end
-
-
-
-			// Master dimmer
-			15: begin
-				mult_in_a <= predimmed_red;
-				mult_in_b <= masterfader;
-			end
-			16: begin
-				red <= mult_out[15:8];
-			end
-			17: begin
-				mult_in_a <= predimmed_green;
-			end
-			18: begin
-				green <= mult_out[15:8];
-			end
-			19: begin
-				mult_in_a <= predimmed_blue;
-			end
-			20: begin
-				blue <= mult_out[15:8];
+				blue <= fadeout;
 			end
 
 		endcase
